@@ -22,8 +22,8 @@ module "compute" {
 
   project_name     = var.project_name
   environment      = var.environment
-  vpc_id           = module.network.vpc_id
-  subnet_id        = module.network.public_subnet_ids[0]
+  vpc_id    = module.networking.vpc_id
+  subnet_id = module.networking.public_subnet_ids[0]
   ami_id           = var.ami_id
   instance_type    = var.instance_type
   ssh_allowed_cidr = var.ssh_allowed_cidr
