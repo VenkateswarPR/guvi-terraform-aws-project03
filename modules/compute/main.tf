@@ -1,11 +1,11 @@
 
 resource "aws_security_group" "web" {
-  name        = "${var.project_name}-${var.environment}-web-sg"
-  description = "Security group for the Terraform web server"
+  name_prefix = "web-dev-"
+  description = "Allow HTTP and restricted SSH access"
   vpc_id      = var.vpc_id
 
   ingress {
-    description = "HTTP"
+    description = "HTTP access"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -13,7 +13,7 @@ resource "aws_security_group" "web" {
   }
 
   ingress {
-    description = "SSH restricted to configured IP"
+    description = "SSH access from approved IP"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -21,6 +21,7 @@ resource "aws_security_group" "web" {
   }
 
   egress {
+    description = "Allow outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -28,13 +29,14 @@ resource "aws_security_group" "web" {
   }
 
   tags = {
-    Name        = "${var.project_name}-${var.environment}-web-sg"
+    Name        = "web-dev"
     Environment = var.environment
+    ManagedBy   = "Terraform"
   }
 }
 
 resource "aws_iam_role" "ec2_role" {
-  name = "${var.project_name}-${var.environment}-ec2-role"
+  name_prefix = "web-dev-"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -49,12 +51,13 @@ resource "aws_iam_role" "ec2_role" {
 
   tags = {
     Environment = var.environment
+    ManagedBy   = "Terraform"
   }
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "${var.project_name}-${var.environment}-ec2-profile"
-  role = aws_iam_role.ec2_role.name
+  name_prefix = "web-dev-"
+  role        = aws_iam_role.ec2_role.name
 }
 
 resource "aws_instance" "web" {
@@ -65,27 +68,37 @@ resource "aws_instance" "web" {
   iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
   associate_public_ip_address = true
 
-  user_data_replace_on_change = true
-
   user_data = <<-EOF
     #!/bin/bash
+    set -eux
     dnf install -y nginx
-    systemctl enable --now nginx
+    systemctl enable nginx
+    systemctl start nginx
+
     cat > /usr/share/nginx/html/index.html <<'HTML'
     <!DOCTYPE html>
-    <html>
-      <head><title>GUVI Project 03</title></head>
-      <body>
-        <h1>GUVI Project 03</h1>
-        <p>Web server deployed using Terraform.</p>
-      </body>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>GUVI Project-03</title>
+    </head>
+    <body>
+      <h1>GUVI Project-03</h1>
+      <h2>AWS Infrastructure Automation</h2>
+      <p>Terraform + GitHub Actions</p>
+      <p>Deployment successful!</p>
+    </body>
     </html>
     HTML
   EOF
 
+  user_data_replace_on_change = true
+
   tags = {
-    Name        = "${var.project_name}-${var.environment}-web"
+    Name        = "web-dev"
     Environment = var.environment
+    ManagedBy   = "Terraform"
   }
 }
 
@@ -94,7 +107,8 @@ resource "aws_eip" "web" {
   instance = aws_instance.web.id
 
   tags = {
-    Name        = "${var.project_name}-${var.environment}-web-eip"
+    Name        = "web-dev-eip"
     Environment = var.environment
+    ManagedBy   = "Terraform"
   }
 }
