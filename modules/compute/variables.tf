@@ -1,16 +1,26 @@
 
+variable "project_name" {
+  description = "Project name"
+  type        = string
+}
+
 variable "environment" {
   description = "Deployment environment"
   type        = string
 }
 
 variable "vpc_id" {
-  description = "VPC ID for the EC2 security group"
+  description = "VPC ID"
   type        = string
 }
 
 variable "subnet_id" {
-  description = "Public subnet ID for the EC2 instance"
+  description = "Public subnet ID"
+  type        = string
+}
+
+variable "ami_id" {
+  description = "EC2 AMI ID"
   type        = string
 }
 
@@ -19,17 +29,7 @@ variable "instance_type" {
   type        = string
 }
 
-variable "ami_id" {
-  description = "Amazon Linux AMI ID"
-  type        = string
-}
-
 variable "ssh_allowed_cidr" {
-  description = "Your public IP in CIDR notation, for example 203.0.113.10/32"
+  description = "CIDR allowed to SSH"
   type        = string
-
-  validation {
-    condition     = can(cidrnetmask(var.ssh_allowed_cidr))
-    error_message = "Provide a valid CIDR range for SSH access."
-  }
 }
