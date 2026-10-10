@@ -70,27 +70,18 @@ resource "aws_instance" "web" {
 
   user_data = <<-EOF
     #!/bin/bash
-    set -eux
-    dnf install -y nginx
-    systemctl enable nginx
-    systemctl start nginx
-
-    cat > /usr/share/nginx/html/index.html <<'HTML'
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>GUVI Project-03</title>
-    </head>
-    <body>
-      <h1>GUVI Project-03</h1>
-      <h2>AWS Infrastructure Automation</h2>
-      <p>Terraform + GitHub Actions</p>
-      <p>Deployment successful!</p>
-    </body>
-    </html>
-    HTML
+dnf install -y nginx
+systemctl enable --now nginx
+cat > /usr/share/nginx/html/index.html <<'HTML'
+<!DOCTYPE html>
+<html>
+  <head><title>GUVI Project 03</title></head>
+  <body>
+    <h1>GUVI Project 03</h1>
+    <p>Web server deployed using Terraform.</p>
+  </body>
+</html>
+HTML
   EOF
 
   user_data_replace_on_change = true
