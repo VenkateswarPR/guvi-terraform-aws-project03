@@ -43,9 +43,7 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-       - name: Terraform Plan
-        env:
-          TF_LOG: DEBUG
+      - name: Terraform Plan
         run: |
           terraform plan -input=false -no-color -lock-timeout=60s \
             -var="ami_id=ami-08e3b3155fc937a94" \
