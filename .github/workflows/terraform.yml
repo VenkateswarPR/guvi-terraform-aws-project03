@@ -1,4 +1,3 @@
-
 name: Terraform AWS Infrastructure
 
 on:
@@ -11,11 +10,21 @@ permissions:
   contents: read
   id-token: write
 
-jobs:
-  terraform:
-    name: Validate and Plan
-    runs-on: ubuntu-latest
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false
 
+env:
+  AWS_REGION: ap-south-1
+  TF_IN_AUTOMATION: "true"
+  TF_VERSION: 1.13.5
+  TF_VAR_ami_id: ${{ vars.AMI_ID }}
+  TF_VAR_ssh_allowed_cidr: ${{ vars.SSH_ALLOWED_CIDR }}
+
+jobs:
+  terraform-plan:
+    name: Format, Init, Validate, Plan
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,7 +33,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ap-south-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
@@ -32,19 +41,127 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.13.5
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
-      - name: Terraform Initialize
+      - name: Terraform Init
         run: terraform init -input=false
 
       - name: Terraform Validate
         run: terraform validate
 
       - name: Terraform Plan
+        run: terraform plan -input=false -no-color -lock-timeout=60s -out=tfplan
+
+      - name: Save readable plan
+        run: terraform show -no-color tfplan | tee plan.txt
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: |
+            tfplan
+            plan.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  terraform-apply:
+    name: Apply Approved Plan
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan
+          path: .
+
+      - name: Terraform Apply
+        run: terraform apply -input=false -auto-approve -lock-timeout=60s tfplan
+
+      - name: Terraform Outputs
         run: |
-          terraform plan -input=false -no-color -lock-timeout=60s \
-            -var="ami_id=ami-08e3b3155fc937a94" \
-            -var="ssh_allowed_cidr=49.37.216.13/32"
+          echo "===== TERRAFORM OUTPUTS ====="
+          terraform output -no-color
+          terraform output -json > outputs.json
+
+      - name: Infrastructure Validation
+        run: |
+          set -euo pipefail
+
+          for k in vpc_id ec2_instance_id elastic_ip application_url s3_bucket_name security_group_id iam_role_name; do
+            jq -e --arg k "$k" 'has($k)' outputs.json > /dev/null \
+              || { echo "Missing Terraform output: $k"; exit 1; }
+          done
+
+          IP=$(terraform output -raw elastic_ip)
+          URL=$(terraform output -raw application_url)
+          INSTANCE=$(terraform output -raw ec2_instance_id)
+          BUCKET=$(terraform output -raw s3_bucket_name)
+          SG=$(terraform output -raw security_group_id)
+          ROLE=$(terraform output -raw iam_role_name)
+
+          echo "--- EC2 instance ---"
+          STATE=$(aws ec2 describe-instances --instance-ids "$INSTANCE" \
+            --query 'Reservations[0].Instances[0].State.Name' --output text)
+          echo "State: $STATE"
+          [ "$STATE" = "running" ]
+
+          echo "--- Elastic IP ---"
+          aws ec2 describe-addresses --public-ips "$IP" \
+            --query 'Addresses[0].[PublicIp,InstanceId]' --output text
+
+          echo "--- S3 bucket ---"
+          aws s3api get-bucket-versioning --bucket "$BUCKET"
+          aws s3api get-bucket-encryption --bucket "$BUCKET"
+          aws s3api get-public-access-block --bucket "$BUCKET"
+
+          echo "--- IAM role and security group ---"
+          aws iam get-role --role-name "$ROLE" --query 'Role.RoleName' --output text
+          aws ec2 describe-security-groups --group-ids "$SG" \
+            --query 'SecurityGroups[0].IpPermissions[].[FromPort,ToPort]' --output text
+
+          echo "--- Web server (waiting for user data to finish) ---"
+          for i in $(seq 1 24); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$URL" || true)
+            echo "Attempt $i: HTTP $CODE"
+            if [ "$CODE" = "200" ]; then
+              echo "Web server is UP at $URL"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Web server did not respond at $URL"
+          exit 1
+
+      - name: Upload Outputs Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: outputs.json
+          if-no-files-found: ignore

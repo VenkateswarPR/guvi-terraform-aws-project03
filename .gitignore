@@ -29,3 +29,8 @@ crash.*.log
 .idea/
 .DS_Store
 Thumbs.db
+tfplan
+plan.txt
+outputs.json
+Terraform.docx
+project03-code.txt

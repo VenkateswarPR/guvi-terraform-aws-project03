@@ -1,4 +1,3 @@
-
 data "aws_caller_identity" "current" {}
 
 data "aws_availability_zones" "available" {
@@ -24,10 +23,12 @@ module "compute" {
   ami_id           = var.ami_id
   instance_type    = var.instance_type
   ssh_allowed_cidr = var.ssh_allowed_cidr
+  s3_bucket_arn    = aws_s3_bucket.application.arn
 }
 
 resource "aws_s3_bucket" "application" {
-  bucket = "${var.project_name}-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
+  bucket        = "${var.project_name}-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
+  force_destroy = true
 
   tags = {
     Name        = "${var.project_name}-application"

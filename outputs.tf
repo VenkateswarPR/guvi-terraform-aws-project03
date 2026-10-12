@@ -1,4 +1,3 @@
-
 output "vpc_id" {
   description = "ID of the VPC"
   value       = module.networking.vpc_id
@@ -22,4 +21,14 @@ output "application_url" {
 output "s3_bucket_name" {
   description = "Name of the application S3 bucket"
   value       = aws_s3_bucket.application.bucket
+}
+
+output "security_group_id" {
+  description = "ID of the web server security group"
+  value       = module.compute.security_group_id
+}
+
+output "iam_role_name" {
+  description = "Name of the EC2 IAM role"
+  value       = module.compute.iam_role_name
 }

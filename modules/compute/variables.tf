@@ -1,4 +1,3 @@
-
 variable "project_name" {
   description = "Project name"
   type        = string
@@ -31,5 +30,10 @@ variable "instance_type" {
 
 variable "ssh_allowed_cidr" {
   description = "CIDR allowed to SSH"
+  type        = string
+}
+
+variable "s3_bucket_arn" {
+  description = "ARN of the application S3 bucket the instance may access"
   type        = string
 }
